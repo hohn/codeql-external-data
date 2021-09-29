@@ -1,0 +1,58 @@
+* External data additions to CodeQL database
+  This minimal example builds a codeql database containing both C code and CSV
+  data read from a file, then runs a simple query to list the CSV entries. 
+
+** Common setup
+   In this snippet, adjust the codeql path for your own setup, then paste it in
+   bash/zsh/ksh:
+   #+BEGIN_SRC sh
+     # Add codeql cli tools to path
+     export PATH=$HOME/local/vmsync/codeql250:"$PATH"
+
+     SRCDIR=$(pwd)
+     DB=$SRCDIR/cpp-simple-$(echo $$).db
+
+     test -d "$DB" && rm -fR "$DB"
+     mkdir -p "$DB"
+   #+END_SRC
+
+** Create the CodeQL database
+   Create the CodeQL database via 
+   #+BEGIN_SRC sh
+     # The usual command is just 
+     #   cd $SRCDIR && codeql database create -l cpp -s $SRCDIR -j 8 -v $DB --command='./build.sh'
+     # but here we need the expanded version to include csv data
+     # 
+     # 
+     codeql database init -l cpp -s $SRCDIR $DB
+     # Optional: include non-CSV code
+     codeql database trace-command -v $DB './build.sh'
+     codeql database index-files -l csv --include "*.csv" $DB
+     codeql database finalize $DB
+
+     # Bundle it if desired
+     codeql database bundle -o $DB.zip $DB
+   #+END_SRC
+
+   Run
+   : codeql database index-files -vvvv -h
+   for more descriptions of the available options, including the syntax for
+   include/exclude globs and working directory to find CSV files in.
+  
+** Run a query using ExternalData
+   #+BEGIN_SRC sh
+     # Run the query and keep report results in cpp-simple.sarif
+     codeql database analyze                         \
+            -v                                       \
+            --rerun                                  \
+            --format=sarif-latest                    \
+            --output cpp-simple.sarif                \
+            --                                       \
+            $DB                                      \
+            $SRCDIR/QueryInfo.ql
+
+     # Check for the data
+     grep Foo cpp-simple.sarif
+     : should be "text" : "Found id:0 name:Foo\nFound id:1 name:Bar"
+   #+END_SRC
+
